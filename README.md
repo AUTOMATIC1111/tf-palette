@@ -7,7 +7,7 @@ Run the program as:
 python train.py <input> <output> <color-count> <filename-with-mask> <N>
 ```
 
-Every <N> optimization steps, the result will be written out to file with name <filename-with-mask>. Set <N> to 0 to disable.
+Every `<N>` optimization steps, the result will be written out to file with name `<filename-with-mask>`. Set `<N>` to 0 to disable.
 
 You must specify all 5 arguments.
 
