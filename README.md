@@ -1,18 +1,21 @@
 Tensorflow color quantizaton
 ============================
 
-Run the program as:
-
 ```
-python train.py <input> <output> <color-count> <filename-with-mask> <N>
-```
+usage: train.py [-h] [-d N] [-m MASK] [-q] input output colors
 
-Every `<N>` optimization steps, the result will be written out to file with name `<filename-with-mask>`. Set `<N>` to 0 to disable.
+Tensorflow image quantization
 
-You must specify all 5 arguments.
+positional arguments:
+  input                 imput image file
+  output                output image file
+  colors                color count
 
-For example:
-
-```
-python train.py 1477775644004.jpg res.png 4 res%04d.png 100
+optional arguments:
+  -h, --help            show this help message and exit
+  -d N, --history N     create an output file every N steps
+  -m MASK, --history-mask MASK
+                        use MASK to generate filenames for files created with
+                        --history option, default is '%05d.png'
+  -q, --quiet           do not output progress
 ```

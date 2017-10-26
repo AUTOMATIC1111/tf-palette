@@ -4,17 +4,24 @@ import PIL.Image
 import os
 from skimage import color
 import sys
-
+import argparse
 import tensorflow as tf
 
-filename = sys.argv[1]
-outputFilename = sys.argv[2]
-colorCount = int(sys.argv[3])
-saveEveryFilenameMask = sys.argv[4]
-saveEvery = int(sys.argv[5])
+parser = argparse.ArgumentParser(description = "Tensorflow image quantization")
+parser.add_argument("input", help="imput image file")
+parser.add_argument("output", help="output image file")
+parser.add_argument("colors", help="color count", type=int)
+parser.add_argument("-d", "--history", help="create an output file every N steps", type=int, metavar="N")
+parser.add_argument("-m", "--mask", help="use MASK to generate filenames for files created with --history option, default is '%%05d.png'", metavar="MASK")
+parser.add_argument("-q", "--quiet", help="do not output progress", action="store_true")
+args = parser.parse_args()
+
+def info(text):
+    if not args.quiet:
+        print(text)
 
 channelCount = 3
-image = PIL.Image.open(filename).convert('RGB')
+image = PIL.Image.open(args.input).convert('RGB')
 width, height = image.size
 
 ax = color.rgb2lab(np.asarray(image).reshape([height, width, channelCount]).astype('float32') * 1.0 / 255)
@@ -22,14 +29,14 @@ ax = ax.reshape([height * width, channelCount]);
 
 input = tf.placeholder(tf.float32, shape=(width*height, channelCount))
 images_reshaped = tf.reshape(input, [width*height, 1, channelCount])
-images_tiled = tf.tile(images_reshaped, [1,colorCount,1])
+images_tiled = tf.tile(images_reshaped, [1,args.colors,1])
 
-color_l = tf.Variable( tf.random_uniform([colorCount], minval=0, maxval=100), name="l" )
-color_a = tf.Variable( tf.random_uniform([colorCount], minval=-128, maxval=128), name="a" )
-color_b = tf.Variable( tf.random_uniform([colorCount], minval=-128, maxval=128), name="b" )
+color_l = tf.Variable( tf.random_uniform([args.colors], minval=0, maxval=100), name="l" )
+color_a = tf.Variable( tf.random_uniform([args.colors], minval=-128, maxval=128), name="a" )
+color_b = tf.Variable( tf.random_uniform([args.colors], minval=-128, maxval=128), name="b" )
 colors = tf.stack( [ color_l, color_a, color_b ], axis=1 )
 
-colors_reshaped = tf.reshape(colors, [1, colorCount, channelCount])
+colors_reshaped = tf.reshape(colors, [1, args.colors, channelCount])
 colors_tiled = tf.tile(colors_reshaped, [width*height,1,1])
 
 difference = tf.reduce_sum(tf.abs(images_tiled - colors_tiled), axis=2)
@@ -117,7 +124,7 @@ def nextPhase():
         loss_var = loss_early
         stepToStartCheckingImprovement = step + runningAverageSize
     
-    print('switching to phase '+str(phase))
+    info('switching to phase '+str(phase))
 
 for step in range(10000):
     _, loss = sess.run([train_step, loss_var], feed_dict={ input: ax })
@@ -125,23 +132,23 @@ for step in range(10000):
     shortAverage.add(loss)
     improvement = longAverage.mean() - shortAverage.mean();
    
-    print('step: '+str(step)+', loss: '+str(loss)+", improvement: "+str(improvement));
+    info('step: '+str(step)+', loss: '+str(loss)+", improvement: "+str(improvement));
     
     if step>stepToStartCheckingImprovement and improvement<0.01 and phase==0:
         nextPhase()
     elif step>stepToStartCheckingImprovement and improvement<0.001 and phase==1:
         indexes_value = sess.run([indexes], feed_dict={ input: ax })
-        resultColorCount = np.unique(indexes_value).shape[0]
-        if resultColorCount == colorCount:
-            print('finished')
+        color_count = np.unique(indexes_value).shape[0]
+        if color_count == args.colors:
+            info('finished')
             break
         
-        print('color count in result: '+str(resultColorCount))
+        info('color count in result: '+str(color_count))
         nextPhase()
 
-    if(saveEvery > 0 and step%saveEvery==0):
-        save_picture(saveEveryFilenameMask % index)
+    if(args.history > 0 and step % args.history==0):
+        save_picture(args.mask % index)
         index+=1
 
-save_picture(outputFilename);
+save_picture(args.output);
 
