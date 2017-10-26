@@ -20,21 +20,31 @@ def info(text):
     if not args.quiet:
         print(text)
 
+def maximin(x):
+    centers = np.array([x[0]])
+    while centers.shape[0] < args.colors:
+        distances = []
+        for i in range(centers.shape[0]):
+            distances += [ np.sum(np.square(x-centers[i]),axis=1) ]
+        distance_to_closest = np.min(np.array(distances), axis=0)
+        index = np.argmax(distance_to_closest)
+        centers =  np.vstack([centers, x[index]])
+    
+    return np.array(centers, dtype=np.float32)
+
 channelCount = 3
 image = PIL.Image.open(args.input).convert('RGB')
 width, height = image.size
 
 ax = color.rgb2lab(np.asarray(image).reshape([height, width, channelCount]).astype('float32') * 1.0 / 255)
 ax = ax.reshape([height * width, channelCount]);
+initial_colors = maximin(ax)
 
 input = tf.placeholder(tf.float32, shape=(width*height, channelCount))
 images_reshaped = tf.reshape(input, [width*height, 1, channelCount])
 images_tiled = tf.tile(images_reshaped, [1,args.colors,1])
 
-color_l = tf.Variable( tf.random_uniform([args.colors], minval=0, maxval=100), name="l" )
-color_a = tf.Variable( tf.random_uniform([args.colors], minval=-128, maxval=128), name="a" )
-color_b = tf.Variable( tf.random_uniform([args.colors], minval=-128, maxval=128), name="b" )
-colors = tf.stack( [ color_l, color_a, color_b ], axis=1 )
+colors = tf.Variable( tf.constant(initial_colors*0.9999), name="lab")
 
 colors_reshaped = tf.reshape(colors, [1, args.colors, channelCount])
 colors_tiled = tf.tile(colors_reshaped, [width*height,1,1])
@@ -54,11 +64,11 @@ error_worst = tf.sqrt(tf.reduce_sum(tf.square(restored_worst - input), axis=1))
 
 loss_early = tf.reduce_mean(error_best) + 0.5 * tf.reduce_mean(error_worst)
 loss_late = tf.reduce_mean(error_best)
-loss_var = loss_early
+loss_var = loss_late
 
-train_step_early = tf.train.AdamOptimizer (learning_rate=15).minimize(loss_early)
-train_step_later = tf.train.AdamOptimizer (learning_rate=2).minimize(loss_late)
-train_step = train_step_early
+train_step_early = tf.train.AdamOptimizer(learning_rate=15).minimize(loss_early)
+train_step_later = tf.train.AdamOptimizer(learning_rate=2).minimize(loss_late)
+train_step = train_step_later
 
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
@@ -93,7 +103,7 @@ class RunningAverage:
         
         return  sum(self.list) / len(self.list)
 
-phase = 0
+phase = 1
 runningAverageSize = 30
 longAverage = RunningAverage(runningAverageSize)
 shortAverage = RunningAverage(runningAverageSize/2)
