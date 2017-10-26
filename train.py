@@ -12,7 +12,7 @@ parser.add_argument("input", help="imput image file")
 parser.add_argument("output", help="output image file")
 parser.add_argument("colors", help="color count", type=int)
 parser.add_argument("-d", "--history", help="create an output file every N steps", type=int, metavar="N")
-parser.add_argument("-m", "--mask", help="use MASK to generate filenames for files created with --history option, default is '%%05d.png'", metavar="MASK")
+parser.add_argument("-m", "--mask", help="use MASK to generate filenames for files created with --history option, default is '%%05d.png'", default='%05d.png', metavar="MASK")
 parser.add_argument("-q", "--quiet", help="do not output progress", action="store_true")
 args = parser.parse_args()
 
