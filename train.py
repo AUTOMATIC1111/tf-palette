@@ -39,16 +39,19 @@ restored_picture = tf.gather(colors, indexes)
 
 worst_colors = tf.argmax(difference, axis=1)
 restored_worst = tf.gather(colors, worst_colors)
+difference = restored_picture - input
 
-loss_best = tf.sqrt(tf.reduce_sum(tf.square(restored_picture - input), axis=1))
-loss_worst = tf.sqrt(tf.reduce_sum(tf.square(restored_worst - input), axis=1))
+error_unevenness = tf.reduce_mean(tf.abs(difference - tf.reduce_mean(difference)))
+error_best = tf.sqrt(tf.reduce_sum(tf.square(difference), axis=1))
+error_worst = tf.sqrt(tf.reduce_sum(tf.square(restored_worst - input), axis=1))
 
-loss = tf.reduce_sum( loss_best + 0.1 * loss_worst )
-later_loss = tf.reduce_sum( loss_best )
+loss_early = tf.reduce_mean(error_best) + 0.25 * tf.reduce_min(error_best)  + 0.5 * tf.reduce_mean(error_worst) + 0.25 * tf.reduce_min(error_worst) 
+loss_late = tf.reduce_mean(error_best) + 0.25 * tf.reduce_min(error_best)
+loss_var = loss_early
 
-train_step_initial = tf.train.GradientDescentOptimizer (learning_rate=0.000015).minimize(loss)
-train_step_later = tf.train.GradientDescentOptimizer (learning_rate=0.000015).minimize(later_loss)
-train_step = train_step_initial
+train_step_early = tf.train.AdamOptimizer (learning_rate=15).minimize(loss_early)
+train_step_later = tf.train.AdamOptimizer (learning_rate=2).minimize(loss_late)
+train_step = train_step_early
 
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
@@ -63,18 +66,82 @@ def save_picture(name):
     img = PIL.Image.fromarray(imgdata, 'RGB')
     img.save(name)
 
-for step in range(10000):
-    if step==2000:
-        train_step=train_step_later
-    
-    _, loss_val = sess.run([train_step, loss], feed_dict={ input: ax })
-    
-    print('step: '+str(step)+', loss: '+str(loss_val))
-    
-    if(saveEvery > 0 and step%saveEvery==0):
-        save_picture(saveEveryFilenameMask % step);
+class RunningAverage:
+    def __init__(self, s):
+        self.size = s
+        self.list = []
+
+    def add(self, v):
+        self.list += [v]
         
-        last_loss=loss_val
+        if len(self.list)>self.size:
+            self.list.pop(0)
+            
+    def clear(self):
+        self.list = []
+    
+    def mean(self):
+        if len(self.list) == 0:
+            return 0
+        
+        return  sum(self.list) / len(self.list)
+
+phase = 0
+runningAverageSize = 30
+longAverage = RunningAverage(runningAverageSize)
+shortAverage = RunningAverage(runningAverageSize/2)
+stepToStartCheckingImprovement = runningAverageSize
+index = 1
+
+def nextPhase():
+    global step
+    global runningAverageSize
+    global phase
+    global train_step
+    global loss_var
+    global stepToStartCheckingImprovement
+    global shortAverage
+    global longAverage
+
+    shortAverage.clear()
+    longAverage.clear()
+    
+    if phase==0:
+        phase=1
+        train_step = train_step_later
+        loss_var = loss_late
+        stepToStartCheckingImprovement = step + runningAverageSize
+    elif phase==1:
+        phase=0
+        train_step = train_step_early
+        loss_var = loss_early
+        stepToStartCheckingImprovement = step + runningAverageSize
+    
+    print('switching to pase '+str(phase))
+
+for step in range(10000):
+    _, loss = sess.run([train_step, loss_var], feed_dict={ input: ax })
+    longAverage.add(loss)
+    shortAverage.add(loss)
+    improvement = longAverage.mean() - shortAverage.mean();
+   
+    print('step: '+str(step)+', loss: '+str(loss)+", improvement: "+str(improvement));
+    
+    if step>stepToStartCheckingImprovement and improvement<0.01 and phase==0:
+        nextPhase()
+    elif step>stepToStartCheckingImprovement and improvement<0.001 and phase==1:
+        indexes_value = sess.run([indexes], feed_dict={ input: ax })
+        resultColorCount = np.unique(indexes_value).shape[0]
+        if resultColorCount == colorCount:
+            print('finished')
+            break
+        
+        print('color count in result: '+resultColorCount)
+        nextPhase()
+
+    if(saveEvery > 0 and step%saveEvery==0):
+        save_picture(saveEveryFilenameMask % index)
+        index+=1
 
 save_picture(outputFilename);
 
