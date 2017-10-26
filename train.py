@@ -45,8 +45,8 @@ error_unevenness = tf.reduce_mean(tf.abs(difference - tf.reduce_mean(difference)
 error_best = tf.sqrt(tf.reduce_sum(tf.square(difference), axis=1))
 error_worst = tf.sqrt(tf.reduce_sum(tf.square(restored_worst - input), axis=1))
 
-loss_early = tf.reduce_mean(error_best) + 0.25 * tf.reduce_min(error_best)  + 0.5 * tf.reduce_mean(error_worst) + 0.25 * tf.reduce_min(error_worst) 
-loss_late = tf.reduce_mean(error_best) + 0.25 * tf.reduce_min(error_best)
+loss_early = tf.reduce_mean(error_best) + 0.5 * tf.reduce_mean(error_worst)
+loss_late = tf.reduce_mean(error_best)
 loss_var = loss_early
 
 train_step_early = tf.train.AdamOptimizer (learning_rate=15).minimize(loss_early)
@@ -117,7 +117,7 @@ def nextPhase():
         loss_var = loss_early
         stepToStartCheckingImprovement = step + runningAverageSize
     
-    print('switching to pase '+str(phase))
+    print('switching to phase '+str(phase))
 
 for step in range(10000):
     _, loss = sess.run([train_step, loss_var], feed_dict={ input: ax })
@@ -136,7 +136,7 @@ for step in range(10000):
             print('finished')
             break
         
-        print('color count in result: '+resultColorCount)
+        print('color count in result: '+str(resultColorCount))
         nextPhase()
 
     if(saveEvery > 0 and step%saveEvery==0):
