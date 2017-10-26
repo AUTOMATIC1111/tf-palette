@@ -3,6 +3,7 @@ import PIL
 import PIL.Image
 import os
 from skimage import color
+import math
 import sys
 import argparse
 import tensorflow as tf
@@ -32,13 +33,28 @@ def maximin(x):
     
     return np.array(centers, dtype=np.float32)
 
+def circular(x):
+    centers = []
+    for i in range(args.colors):
+        angle = 2 * math.pi * i / args.colors
+        l = 75
+        a = 127.9 * math.sin(angle)
+        b = 127.9 * math.cos(angle)
+        
+        
+
+        centers +=  [ [l, a, b] ]
+    
+    return np.array(centers, dtype=np.float32)
+
+
 channelCount = 3
 image = PIL.Image.open(args.input).convert('RGB')
 width, height = image.size
 
 ax = color.rgb2lab(np.asarray(image).reshape([height, width, channelCount]).astype('float32') * 1.0 / 255)
 ax = ax.reshape([height * width, channelCount]);
-initial_colors = maximin(ax)
+initial_colors = circular(ax)
 
 input = tf.placeholder(tf.float32, shape=(width*height, channelCount))
 images_reshaped = tf.reshape(input, [width*height, 1, channelCount])
@@ -58,8 +74,10 @@ worst_colors = tf.argmax(difference, axis=1)
 restored_worst = tf.gather(colors, worst_colors)
 difference = restored_picture - input
 
+error_correction = tf.sqrt(tf.abs(input[:,0]-50) * (input[:,1]+128.0) * (input[:,2]+128.0) / (50.0 * 256.0 * 256.0))
+
 error_unevenness = tf.reduce_mean(tf.abs(difference - tf.reduce_mean(difference)))
-error_best = tf.sqrt(tf.reduce_sum(tf.square(difference), axis=1))
+error_best = tf.sqrt(tf.reduce_sum(tf.square(difference), axis=1)) * (0.1 + 0.9 * error_correction)
 error_worst = tf.sqrt(tf.reduce_sum(tf.square(restored_worst - input), axis=1))
 
 loss_early = tf.reduce_mean(error_best) + 0.5 * tf.reduce_mean(error_worst)
@@ -137,28 +155,28 @@ def nextPhase():
     info('switching to phase '+str(phase))
 
 for step in range(10000):
-    _, loss = sess.run([train_step, loss_var], feed_dict={ input: ax })
-    longAverage.add(loss)
-    shortAverage.add(loss)
-    improvement = longAverage.mean() - shortAverage.mean();
-   
-    info('step: '+str(step)+', loss: '+str(loss)+", improvement: "+str(improvement));
-    
-    if step>stepToStartCheckingImprovement and improvement<0.01 and phase==0:
-        nextPhase()
-    elif step>stepToStartCheckingImprovement and improvement<0.001 and phase==1:
-        indexes_value = sess.run([indexes], feed_dict={ input: ax })
-        color_count = np.unique(indexes_value).shape[0]
-        if color_count == args.colors:
-            info('finished')
-            break
-        
-        info('color count in result: '+str(color_count))
-        nextPhase()
-
     if(args.history > 0 and step % args.history==0):
         save_picture(args.mask % index)
         index+=1
+
+    _, loss, indexes_value = sess.run([train_step, loss_var, indexes], feed_dict={ input: ax })
+    longAverage.add(loss)
+    shortAverage.add(loss)
+    improvement = longAverage.mean() - shortAverage.mean();
+    color_count = np.unique(indexes_value).shape[0]
+   
+    info('step: '+str(step)+', loss: '+str(loss)+", improvement: "+str(improvement)+" colors: "+str(color_count));
+    
+    if step>stepToStartCheckingImprovement and color_count==args.colors and phase==0:
+        nextPhase()
+    elif phase==1:
+        if color_count != args.colors:
+            info('color count in result: '+str(color_count))
+            nextPhase()
+        elif step>stepToStartCheckingImprovement and improvement<0.001:
+            info('finished')
+            break
+        
 
 save_picture(args.output);
 
